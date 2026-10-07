@@ -31,3 +31,11 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+maelstrom/
+/maelstrom
+*.tar.bz2
+
+store/
+.vscode/
+.idea/
