@@ -39,3 +39,5 @@ maelstrom/
 store/
 .vscode/
 .idea/
+
+.DS_Store
