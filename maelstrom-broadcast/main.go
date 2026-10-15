@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -25,15 +26,37 @@ func main() {
 
 		value := uint64(body["message"].(float64))
 
-		neighborMsg := map[string]any{
-			"type":    "neighbor",
-			"message": value,
-		}
-
 		lock.Lock()
 		if !msgValues[value] {
 			for _, neighbor := range neighbors {
-				node.Send(neighbor, neighborMsg)
+				go func(dest string, val uint64) {
+					neighborMsg := map[string]any{
+						"type":    "neighbor",
+						"message": val,
+					}
+
+					success := make(chan bool, 1)
+
+					for {
+						node.RPC(dest, neighborMsg, func(reply maelstrom.Message) error {
+							select {
+							case success <- true:
+
+							default:
+							}
+
+							return nil
+						})
+
+						select {
+						case <-success:
+							return
+
+						case <-time.After(1 * time.Second):
+						}
+					}
+				}(neighbor, value)
+
 			}
 
 			msgValues[value] = true
@@ -99,22 +122,48 @@ func main() {
 
 		value := uint64(body["message"].(float64))
 
-		neighborMsg := map[string]any{
-			"type":    "neighbor",
-			"message": value,
+		replyBody := map[string]any{
+			"type": "neighbor_ok",
 		}
 
 		lock.Lock()
 		if !msgValues[value] {
 			for _, neighbor := range neighbors {
-				node.Send(neighbor, neighborMsg)
+				go func(dest string, val uint64) {
+
+					neighborMsg := map[string]any{
+						"type":    "neighbor",
+						"message": val,
+					}
+					success := make(chan bool, 1)
+
+					for {
+						node.RPC(dest, neighborMsg, func(reply maelstrom.Message) error {
+							select {
+							case success <- true:
+
+							default:
+							}
+
+							return nil
+						})
+
+						select {
+						case <-success:
+							return
+
+						case <-time.After(1 * time.Second):
+						}
+					}
+
+				}(neighbor, value)
 			}
 
 			msgValues[value] = true
 		}
 		lock.Unlock()
 
-		return nil
+		return node.Reply(msg, replyBody)
 	})
 
 	if err := node.Run(); err != nil {
